@@ -1,0 +1,56 @@
+/* =========================================================
+   全局样式 & 主题定制
+   「行知被试库」采用学术感的靛蓝(Indigo)主色调，
+   通过覆盖 Element Plus 的 CSS 变量实现品牌化配色。
+   ========================================================= */
+
+:root {
+  /* --- Element Plus 主色板（基于靛蓝 indigo-600 派生） --- */
+  --el-color-primary: #4f46e5;
+  --el-color-primary-light-3: #818cf8;
+  --el-color-primary-light-5: #a5b4fc;
+  --el-color-primary-light-7: #c7d2fe;
+  --el-color-primary-light-8: #e0e7ff;
+  --el-color-primary-light-9: #eef2ff;
+  --el-color-primary-dark-2: #4338ca;
+
+  /* --- 布局尺寸变量，供组件共享，便于统一调整 --- */
+  --app-header-height: 60px;
+  --app-sidebar-width: 220px;
+  --app-sidebar-collapsed-width: 64px;
+  --app-content-bg: #f4f6fb;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: 'PingFang SC', 'Microsoft YaHei', 'Helvetica Neue', Arial,
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  color: #1f2937;
+  background: var(--app-content-bg);
+}
+
+/* 细滚动条，让界面更精致 */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-thumb {
+  background: #c7d2fe;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
