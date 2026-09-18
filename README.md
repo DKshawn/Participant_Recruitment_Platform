@@ -3,6 +3,17 @@
 > 面向**行为经济学 / 心理学实验**的被试（参与者）管理、信誉分评估与定向分发平台。
 > 当前为**纯前端演示版**：使用 Vue 3 + Element Plus，Mock 数据驱动，无后端依赖。
 
+## 在线演示
+
+- [学生端入口](https://dkshawn.github.io/Participant_Recruitment_Platform/)
+- [研究者端入口](https://dkshawn.github.io/Participant_Recruitment_Platform/#/admin-auth-secure)
+
+选择「外部机构及通用入口」，点击 Microsoft 或 Google 按钮即可模拟登录，无需输入真实账号或密码。理科大学专用入口会随机演示认证通过或拒绝两种情况。切换学生端与研究者端前，请先退出当前账号。
+
+演示数据仅在当前浏览器中运行，报名、发布实验和评分等修改不会同步给其他访客，刷新页面会重置这些修改。
+
+网站由 `.github/workflows/deploy.yml` 自动构建并发布到 GitHub Pages；推送到 `main` 后自动更新，也可在 Actions 中手动运行。仓库的 Settings → Pages → Source 需设为 GitHub Actions。
+
 ## 隐私与演示数据
 
 - 项目内的用户、参与记录、邮箱和登录令牌用于模拟演示；Microsoft / Google 登录尚未接入真实 OAuth 服务。
@@ -33,7 +44,7 @@ npm install
 
 # 2. 启动开发服务器
 npm run dev
-# 浏览器访问 http://localhost:5173
+# 浏览器访问 http://localhost:5173/Participant_Recruitment_Platform/
 
 # 3. 生产构建
 npm run build && npm run preview

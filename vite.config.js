@@ -4,6 +4,8 @@ import { fileURLToPath, URL } from 'node:url'
 
 // https://vitejs.dev/config/
 export default defineConfig({
+  // GitHub Pages 项目站点的资源根路径。
+  base: '/Participant_Recruitment_Platform/',
   plugins: [vue()],
   resolve: {
     // 配置路径别名：@ 指向 src 目录，方便在组件中使用 @/stores、@/layout 等

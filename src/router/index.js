@@ -1,4 +1,4 @@
-import { createRouter, createWebHistory } from 'vue-router'
+import { createRouter, createWebHashHistory } from 'vue-router'
 import i18n from '@/i18n' // 路由守卫在 setup 之外执行，必须用全局实例（useI18n() 会在 setup 外抛错）
 import { useUserStore } from '@/stores/user'
 
@@ -207,7 +207,8 @@ const routes = [
 ]
 
 const router = createRouter({
-  history: createWebHistory(),
+  // 静态托管使用 hash 路由，直接打开或刷新子页面无需服务器重写规则。
+  history: createWebHashHistory(import.meta.env.BASE_URL),
   routes,
 })
 
