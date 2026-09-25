@@ -22,7 +22,7 @@ import { api, apiEnabled, API_BASE } from '@/services/api'
  *  区域 B「外部机构及通用入口 (External / General)」
  *   - 两个标准按钮：Microsoft / Google
  *   - 模拟 OAuth：随机生成普通 gmail / outlook 邮箱，不限制域名，直接引导进入系统
- *     （学生端 → /student/hall；研究者隐蔽入口 → /researcher/publish）
+ *     （学生端 → /student/hall；研究者隐蔽入口 → /researcher/manage）
  *
  *  两区共用：
  *   - 全屏 Loading 遮罩（「正在跳转至 Microsoft / Google 认证中心…」），setTimeout 1.5s 模拟认证中心往返
@@ -30,7 +30,7 @@ import { api, apiEnabled, API_BASE } from '@/services/api'
  *
  *  路由双入口（沿用 Step 11 的 mode 设计）：
  *   - /                    → mode='student'    学生门户（成功后跳 /student/hall）
- *   - /admin-auth-secure   → mode='researcher' 隐蔽入口（成功后跳 /researcher/publish）
+ *   - /admin-auth-secure   → mode='researcher' 隐蔽入口（成功后跳 /researcher/manage）
  *
  *  安全说明：生产环境的邮箱域名校验必须由后端完成
  *  （校验 OIDC id_token 的 email 声明，或经 Microsoft Graph / Google People API 二次确认）；
@@ -71,7 +71,7 @@ async function localLogin(role) {
   devLoading.value = true
   try {
     await user.loginDevelopment(role)
-    await router.push(user.isResearcher ? '/researcher/publish' : '/student/hall')
+    await router.push(user.isResearcher ? '/researcher/manage' : '/student/hall')
   } catch (error) { ElMessage.error(error.message) }
   finally { devLoading.value = false }
 }
@@ -146,7 +146,7 @@ const ssoProvider = ref('microsoft')
 
 /** 登录成功后的落地页：由路由入口（mode）决定，与入口区域无关 */
 function destination() {
-  return props.mode === 'student' ? '/student/hall' : '/researcher/publish'
+  return props.mode === 'student' ? '/student/hall' : '/researcher/manage'
 }
 
 /**
@@ -186,7 +186,7 @@ function handleTusLogin() {
  * 区域 B：外部机构及通用入口的登录流程（不限制域名，必然通过）
  *  ① 全屏遮罩「正在跳转至 Microsoft / Google 认证中心…」
  *  ② setTimeout 1.5s 后随机生成一个普通 gmail / outlook 邮箱
- *  ③ 写入模拟会话 → 直接进入系统内部（/student/hall 或 /researcher/publish）
+ *  ③ 写入模拟会话 → 直接进入系统内部（/student/hall 或 /researcher/manage）
  * @param {'microsoft'|'google'} provider 授权提供方
  */
 function handleExternalLogin(provider) {

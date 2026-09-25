@@ -1,5 +1,5 @@
 <script setup>
-import { reactive, ref, computed, onMounted } from 'vue'
+import { reactive, ref, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -17,6 +17,8 @@ import { useExperimentStore } from '@/stores/experiment'
 import { pickLocalized, localeBase } from '@/i18n'
 import MultiLangInput from '@/components/MultiLangInput.vue'
 import MultiLangTagSelect from '@/components/MultiLangTagSelect.vue'
+import SessionEditor from '@/components/SessionEditor.vue'
+import { scheduleError } from '@/services/schedule'
 
 /**
  * 研究者端 · 发布新实验
@@ -64,7 +66,9 @@ const form = reactive({
   participants: 20, // 计划招募人数
   reward: 2000, // 实验报酬（积分，Step 12 起 1 积分 = 1 日元）
   minReputation: 0, // 【核心】最低信誉分要求（0~100）
+  sessions: [],
 })
+watch(() => form.sessions, () => formRef.value?.clearValidate('sessions'), { deep: true })
 
 /* ---------------------- 多语言标签（Step 9） ---------------------- */
 /* 标签下拉已抽离为独立组件 MultiLangTagSelect：
@@ -186,6 +190,10 @@ function makeMlValidator(min, max, emptyKey, rangeKey) {
 
 // 校验规则：使用 computed，切换语言后错误提示同步更新
 const rules = computed(() => ({
+  sessions: [{ validator: (_rule, value, done) => {
+    const error = scheduleError(value, form.duration, form.participants)
+    done(error ? new Error(t(`schedule.${error}`)) : undefined)
+  }, trigger: 'change' }],
   title: [
     {
       required: true,
@@ -328,6 +336,7 @@ async function handlePublish() {
         : form.offlineAddress.trim(),
     required_items: { ...form.requiredItems },
     slots: { total: form.participants, filled: 0 },
+    sessions: form.sessions.map(s => ({ ...s })),
     // 【Step 9】多语言标签：择优主数据 + 完整三语原文
     tags: pickBestTags(),
     tagsLocales: {
@@ -354,6 +363,7 @@ function handleReset() {
   form.tags = { zh: [], en: [], ja: [] }
   form.requiredItems = { zh: '', en: '', ja: '' }
   form.minReputation = 0
+  form.sessions = []
   ElMessage.info(t('publish.resetDone'))
 }
 </script>
@@ -515,6 +525,13 @@ function handleReset() {
               </el-form-item>
             </el-col>
           </el-row>
+        </section>
+
+        <section class="form-section">
+          <div class="section-title"><el-icon><Location /></el-icon><span>{{ $t('schedule.title') }}</span></div>
+          <el-form-item prop="sessions">
+            <SessionEditor v-model="form.sessions" :duration="form.duration" :capacity="form.participants" />
+          </el-form-item>
         </section>
 
         <!-- ============ 分组：数据质量要求控制（核心） ============ -->

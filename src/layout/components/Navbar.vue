@@ -94,7 +94,7 @@ async function handleCommand(command) {
   if (apiEnabled) return
   if (command === user.role) return
   user.switchRole(command)
-  const home = command === 'student' ? '/student/hall' : '/researcher/publish'
+  const home = command === 'student' ? '/student/hall' : '/researcher/manage'
   const label =
     command === 'student' ? t('role.student') : t('role.researcher')
   ElMessage.success(t('nav.switched', { label }))

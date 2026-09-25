@@ -11,6 +11,7 @@
     "api:install": "npm ci --prefix server",
     "api:build": "npm run build --prefix server",
     "api:test": "npm test --prefix server",
+    "test:ui": "node --test test/*.test.js",
     "db:up": "docker compose up -d --wait db",
     "db:migrate": "npm run db:migrate --prefix server",
     "db:seed": "npm run db:seed --prefix server",

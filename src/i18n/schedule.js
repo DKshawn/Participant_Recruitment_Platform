@@ -1,0 +1,32 @@
+export default {
+  'zh-CN': {
+    title: '举行时间与场次', timezone: '以下时间均为日本时间（JST / UTC+9）', dates: '选择日期（可多选）', start: '开始时间', seats: '每场名额', add: '添加所选日期',
+    hint: '可多选日期批量添加；同一天不同时段可分批添加。结束时间按实验时长自动计算，每位学生选择一场参加。',
+    totalHint: '各场次独立限制名额，所有场次的报名总人数不超过计划招募人数。',
+    required: '请至少添加一个举行场次。', tooMany: '每个实验最多设置 50 个场次。', futureOnly: '场次开始时间必须晚于当前时间。', durationError: '场次长度不能短于实验时长。', capacityError: '每场名额须为正整数，且不能超过计划招募人数。', overlap: '场次时间重复或重叠，请调整后再添加。', selectDates: '请先选择日期和开始时间。',
+    count: '{n} 个场次', noSchedule: '时间待安排', choose: '请选择参加场次', choiceRequired: '请先选择一个可报名的场次。', unavailable: '已开始或名额已满', selected: '已选场次', session: '举行时间',
+    addMore: '设置 / 追加场次', saved: '场次已保存。', existing: '已公布场次', appendHint: '已公布场次保持不变，可继续追加新场次。原有未选场次的报名仍标为“时间待安排”。', save: '保存场次',
+    manageHint: '查看已发布实验、举行时间和报名情况。', search: '按实验名称或编号搜索', all: '全部状态', details: '实验详情', create: '发布新实验',
+    demoSaved: '演示数据保存在当前浏览器；刷新后仍保留，不会同步给其他访客。', storageError: '浏览器存储不可用，本次修改仅在当前页面有效。', mine: '这里显示由当前研究者发布的实验。',
+  },
+  'en-US': {
+    title: 'Schedule & sessions', timezone: 'All times are Japan time (JST / UTC+9)', dates: 'Select dates (multiple)', start: 'Start time', seats: 'Seats per session', add: 'Add selected dates',
+    hint: 'Add multiple dates at once. Add another batch for different times on the same day. End times follow the study duration. Each student attends one session.',
+    totalHint: 'Each session has its own limit; all enrollments also share the total recruitment limit.',
+    required: 'Add at least one session.', tooMany: 'A study can have up to 50 sessions.', futureOnly: 'Sessions must start in the future.', durationError: 'A session must allow the full study duration.', capacityError: 'Session seats must be a positive integer within the total recruitment limit.', overlap: 'Sessions overlap or repeat. Please adjust the times.', selectDates: 'Choose dates and a start time first.',
+    count: '{n} sessions', noSchedule: 'Time to be arranged', choose: 'Choose a session', choiceRequired: 'Choose an available session first.', unavailable: 'Started or full', selected: 'Selected session', session: 'Study time',
+    addMore: 'Set / add sessions', saved: 'Sessions saved.', existing: 'Published sessions', appendHint: 'Published sessions stay unchanged; you can append new ones. Earlier enrollments without a session remain unscheduled.', save: 'Save sessions',
+    manageHint: 'View published studies, schedules and enrollments.', search: 'Search title or study code', all: 'All statuses', details: 'Study details', create: 'Publish a study',
+    demoSaved: 'Demo data is saved in this browser and survives reloads. It is not shared with other visitors.', storageError: 'Browser storage is unavailable. Changes only last until this page closes.', mine: 'This list contains studies published by the current researcher.',
+  },
+  'ja-JP': {
+    title: '実施日時・セッション', timezone: 'すべて日本時間（JST / UTC+9）です', dates: '日付を選択（複数可）', start: '開始時刻', seats: '各回の定員', add: '選択した日付を追加',
+    hint: '複数日をまとめて追加できます。同日の別時間は追加操作を繰り返してください。終了時刻は実験時間から計算され、学生は一つの回を選びます。',
+    totalHint: '各回の定員に加え、すべての申込数は募集総人数を超えられません。',
+    required: '実施日時を一つ以上追加してください。', tooMany: '実験あたり最大 50 回まで設定できます。', futureOnly: '未来の開始日時を選択してください。', durationError: '実験時間より短い枠は設定できません。', capacityError: '各回の定員は募集総人数以内の正の整数にしてください。', overlap: '日時が重複しています。調整してください。', selectDates: '日付と開始時刻を選択してください。',
+    count: '{n} 回', noSchedule: '日時未定', choose: '参加する回を選択', choiceRequired: '申込可能な回を選択してください。', unavailable: '開始済み・満員', selected: '選択した回', session: '実施日時',
+    addMore: '日時を設定・追加', saved: '日時を保存しました。', existing: '公開済みの日時', appendHint: '公開済みの日時は変更せず、新しい回を追加します。日時未選択の既存申込は未定のまま保持されます。', save: '日時を保存',
+    manageHint: '公開済み実験の日時・申込状況を確認します。', search: '実験名・番号で検索', all: 'すべての状態', details: '実験の詳細', create: '実験を公開',
+    demoSaved: 'デモデータはこのブラウザに保存され、再読み込み後も保持されます。他の閲覧者とは共有されません。', storageError: 'ブラウザに保存できません。変更はこのページ内でのみ有効です。', mine: '現在の研究者が公開した実験を表示しています。',
+  },
+}

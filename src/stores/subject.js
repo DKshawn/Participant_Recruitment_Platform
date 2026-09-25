@@ -1,7 +1,9 @@
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 import { defineStore } from 'pinia'
 import { api, apiEnabled } from '@/services/api'
 import { mockSubjects } from '@/mocks/subjects'
+import { useExperimentStore } from '@/stores/experiment'
+import { sessionUnavailable } from '@/services/schedule'
 import i18n, { pickLocalized } from '@/i18n' // Step 15：报名时按当前界面语言择优实验标题主文本
 
 /**
@@ -23,6 +25,15 @@ export const useSubjectStore = defineStore('subject', () => {
       participations: [...s.participations],
     })),
   )
+  if (!apiEnabled) {
+    try {
+      const saved = JSON.parse(localStorage.getItem('actmind.demo.subjects.v1') || 'null')
+      if (Array.isArray(saved) && saved.every(s => s && typeof s.id === 'string' && Array.isArray(s.participations) && Array.isArray(s.reputationLog))) list.value = saved
+    } catch { /* Keep the seed records if browser storage cannot be read. */ }
+    watch(list, value => {
+      try { localStorage.setItem('actmind.demo.subjects.v1', JSON.stringify(value)) } catch { /* Demo remains usable in memory. */ }
+    }, { deep: true, flush: 'sync' })
+  }
 
   async function load(role) {
     if (!apiEnabled) return
@@ -70,14 +81,19 @@ export const useSubjectStore = defineStore('subject', () => {
    * @param {string} subjectId 学生 id
    * @param {object} exp       实验对象（需含 id / name / reward）
    */
-  async function enroll(subjectId, exp) {
+  async function enroll(subjectId, exp, sessionId) {
     if (apiEnabled) {
-      await api(`/experiments/${exp.id}/enroll`, { method: 'POST' })
+      await api(`/experiments/${exp.id}/enroll`, { method: 'POST', body: sessionId ? { session_id: sessionId } : {} })
       await load('student')
       return
     }
     const s = getById(subjectId)
     if (!s) return
+    const stored = useExperimentStore().getById(exp.id)
+    if (s.participations.some(p => p.experimentId === exp.id)) return
+    if (stored.status !== 'published' || stored.slots.filled >= stored.slots.total) throw new Error(i18n.global.t('backend.full'))
+    const session = stored.sessions.find(session => session.id === sessionId)
+    if (stored.sessions.length && (!session || sessionUnavailable(session))) throw new Error(i18n.global.t('schedule.choiceRequired'))
     // 【Step 15】兼容新 JSONB 结构：
     //  - title 为 {zh,ja,en} 多语言对象 → 按当前界面语言择优落主文本；
     //  - reward_points 取代旧 reward 字段（旧字段兜底兼容）；
@@ -86,6 +102,7 @@ export const useSubjectStore = defineStore('subject', () => {
     s.participations.unshift({
       id: `part_${Date.now()}`,
       experimentId: exp.id,
+      session: session ? { id: session.id, starts_at: session.starts_at, ends_at: session.ends_at } : null,
       experimentName: exp.name || pickLocalized(exp.title, locale),
       experimentTitle: { ...(exp.title || {}) },
       reward: exp.reward_points ?? exp.reward,
@@ -94,6 +111,8 @@ export const useSubjectStore = defineStore('subject', () => {
       reputationDelta: 0,
       reviewed: false,
     })
+    stored.slots.filled++
+    if (session) session.filled++
   }
 
   /** 从被试池中移除某位被试（仅影响当前演示数据） */

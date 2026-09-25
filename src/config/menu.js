@@ -30,8 +30,8 @@ export const menuConfig = {
     { index: '/student/profile', i18nKey: 'menu.profile', icon: User },
   ],
   researcher: [
-    { index: '/researcher/publish', i18nKey: 'menu.publish', icon: EditPen },
     { index: '/researcher/manage', i18nKey: 'menu.manage', icon: Management },
+    { index: '/researcher/publish', i18nKey: 'menu.publish', icon: EditPen },
     { index: '/researcher/pool', i18nKey: 'menu.pool', icon: Avatar },
     { index: '/researcher/review', i18nKey: 'menu.review', icon: Star },
   ],

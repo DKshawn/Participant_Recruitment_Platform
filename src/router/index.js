@@ -18,7 +18,7 @@ import RecordsView from '@/views/student/RecordsView.vue'
  */
 const roleHome = {
   student: '/student/hall',
-  researcher: '/researcher/publish',
+  researcher: '/researcher/manage',
 }
 
 /**
@@ -142,7 +142,7 @@ const routes = [
   {
     path: '/researcher',
     component: MainLayout,
-    redirect: '/researcher/publish',
+    redirect: '/researcher/manage',
     meta: { requiresAuth: true, role: 'researcher' },
     children: [
       {

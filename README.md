@@ -7,7 +7,7 @@
 
 本机后端已支持登录会话、角色权限、实验发布与报名、完成后积分入账、研究者评分及兑换申请。Google / Microsoft OIDC 接入代码已准备，需创建登录应用后配置密钥。
 
-完整安装、启动、登录配置与接口说明见 [本机后端文档](docs/backend.md)。已初始化的本机运行 `npm run db:up`，再运行 `npm run dev:full`，打开 `http://localhost:5173/Participant_Recruitment_Platform/`。
+完整安装、启动、登录配置与接口说明见 [本机后端文档](docs/backend.md)。已初始化的本机依次运行 `npm run db:up`、`npm run api:build`、`npm run db:migrate`、`npm run dev:full`，打开 `http://localhost:5173/Participant_Recruitment_Platform/`。
 
 设置 `.env.local` 中 `VITE_API_BASE_URL=/api` 启用后端；不设置时是静态演示。`npm run build:demo` 可在保留本机配置的同时构建静态版。兑换目前为人工处理申请，未接入 PayPay 转账。
 
@@ -18,7 +18,9 @@
 
 选择「外部机构及通用入口」，点击 Microsoft 或 Google 按钮即可模拟登录，无需输入真实账号或密码。理科大学专用入口会随机演示认证通过或拒绝两种情况。切换学生端与研究者端前，请先退出当前账号。
 
-演示数据仅在当前浏览器中运行，报名、发布实验和评分等修改不会同步给其他访客，刷新页面会重置这些修改。
+演示数据保存在当前浏览器的 localStorage；报名、发布实验和评分等修改刷新后仍保留，但不会同步给其他访客。清理站点数据会恢复初始演示内容；真实后端模式的数据保存在 PostgreSQL。
+
+研究者登录后直接进入实验管理，可搜索已发布实验、查看详情和报名名单、追加场次或结束招募。发布时可多选日期批量设置场次，同一天不同时段可分批添加；结束时间根据实验时长计算。时间统一使用日本时间（JST / UTC+9），每位学生只选择一场，各场名额和实验总人数均受限制。已公布场次暂不修改，避免影响已有报名；旧实验及未选场次的旧报名显示“时间待安排”。
 
 网站由 `.github/workflows/deploy.yml` 自动构建并发布到 GitHub Pages；推送到 `main` 后自动更新，也可在 Actions 中手动运行。仓库的 Settings → Pages → Source 需设为 GitHub Actions。
 

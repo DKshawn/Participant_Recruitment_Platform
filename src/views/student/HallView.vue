@@ -18,6 +18,7 @@ import { useSubjectStore } from '@/stores/subject'
 import { useExperimentStore } from '@/stores/experiment'
 import { pickLocalized } from '@/i18n'
 import { apiEnabled } from '@/services/api'
+import { sessionLabel, sessionUnavailable } from '@/services/schedule'
 
 /**
  * 学生端 · 实验大厅（Step 15：JSONB 多语言结构 + 结构化卡片 + 详情弹窗）
@@ -64,11 +65,11 @@ const reputation = computed(() => current.value?.reputation ?? 0)
 // ---------- 定向分发：前端过滤逻辑 ----------
 const visibleExperiments = computed(() =>
   experimentStore.published.filter(
-    (e) => apiEnabled || e.min_reputation_required <= reputation.value,
+    (e) => e.status !== 'closed' && (apiEnabled || e.min_reputation_required <= reputation.value),
   ),
 )
 const lockedCount = computed(
-  () => experimentStore.published.length - visibleExperiments.length,
+  () => experimentStore.published.filter(e => e.status !== 'closed').length - visibleExperiments.value.length,
 )
 
 // ---------- 信息卡统计（不含信誉分） ----------
@@ -110,9 +111,11 @@ function isEnrolled(exp) {
 }
 async function handleEnroll(exp) {
   if (!current.value || !exp || isEnrolled(exp) || enrolling.value) return
+  if (exp.sessions?.length && (!detailVisible.value || detailExp.value?.id !== exp.id)) return openDetail(exp)
+  if (exp.sessions?.length && !selectedSession.value) return ElMessage.warning(t('schedule.choiceRequired'))
   enrolling.value = true
   try {
-    await subjectStore.enroll(current.value.id, exp)
+    await subjectStore.enroll(current.value.id, exp, exp.sessions?.length ? selectedSession.value : undefined)
     ElMessage.success(t('hall.enrollSuccess', { name: locText(exp, 'title') }))
     detailVisible.value = false
     await experimentStore.load()
@@ -123,8 +126,10 @@ async function handleEnroll(exp) {
 // ---------- 实验详情弹窗（Step 15 新增交互） ----------
 const detailVisible = ref(false)
 const detailExp = ref(null)
+const selectedSession = ref('')
 function openDetail(exp) {
   detailExp.value = exp
+  selectedSession.value = current.value?.participations.find(p => p.experimentId === exp.id)?.session?.id || ''
   detailVisible.value = true
 }
 /* 从详情弹窗内直接报名：报名成功后关闭弹窗 */
@@ -252,6 +257,8 @@ const isHighReward = (exp) => (exp.reward_points ?? 0) >= 5000
             </el-tag>
           </div>
 
+          <p class="schedule-summary">{{ exp.sessions.length ? $t('schedule.count', { n: exp.sessions.length }) : $t('schedule.noSchedule') }}<br v-if="exp.sessions.length" /><span v-if="exp.sessions.length">{{ sessionLabel(exp.sessions[0], locale) }} JST</span></p>
+
           <!-- 简介（多语言择优） -->
           <p class="exp-desc">{{ locText(exp, 'description') }}</p>
 
@@ -310,7 +317,7 @@ const isHighReward = (exp) => (exp.reward_points ?? 0) >= 5000
               type="primary"
               size="large"
               class="enroll-btn"
-              :disabled="isEnrolled(exp) || enrolling || (apiEnabled && exp.slots.filled >= exp.slots.total)"
+              :disabled="isEnrolled(exp) || enrolling || exp.slots.filled >= exp.slots.total || (exp.sessions.length > 0 && exp.sessions.every(sessionUnavailable))"
               @click="handleEnroll(exp)"
             >
               <el-icon v-if="isEnrolled(exp)"><Check /></el-icon>
@@ -372,13 +379,24 @@ const isHighReward = (exp) => (exp.reward_points ?? 0) >= 5000
             {{ locText(detailExp, 'description') }}
           </el-descriptions-item>
         </el-descriptions>
+        <div class="session-choice">
+          <h3>{{ $t('schedule.title') }}</h3>
+          <p>{{ $t('schedule.timezone') }}</p>
+          <p v-if="!detailExp.sessions.length">{{ $t('schedule.noSchedule') }}</p>
+          <el-radio-group v-else v-model="selectedSession" class="session-options" :disabled="isEnrolled(detailExp)">
+            <el-radio v-for="session in detailExp.sessions" :key="session.id" :value="session.id" :disabled="sessionUnavailable(session)" border>
+              {{ sessionLabel(session, locale) }} · {{ session.filled }} / {{ session.capacity }}
+              <span v-if="sessionUnavailable(session)"> · {{ $t('schedule.unavailable') }}</span>
+            </el-radio>
+          </el-radio-group>
+        </div>
       </div>
 
       <template #footer>
         <el-button @click="detailVisible = false">{{ $t('common.cancel') }}</el-button>
         <el-button
           type="primary"
-          :disabled="enrolling || (detailExp && (isEnrolled(detailExp) || (apiEnabled && detailExp.slots.filled >= detailExp.slots.total)))"
+          :disabled="enrolling || (detailExp && (isEnrolled(detailExp) || detailExp.slots.filled >= detailExp.slots.total || (detailExp.sessions.length > 0 && !selectedSession)))"
           @click="handleEnrollFromDetail"
         >
           {{
@@ -394,6 +412,12 @@ const isHighReward = (exp) => (exp.reward_points ?? 0) >= 5000
 </template>
 
 <style scoped>
+.schedule-summary { color: #4338ca; font-size: 13px; line-height: 1.7; }
+.session-choice { margin-top: 20px; }
+.session-choice p { color: #64748b; font-size: 13px; }
+.session-options { display: flex; flex-direction: column; align-items: stretch; gap: 10px; }
+.session-options :deep(.el-radio) { height: auto; min-height: 42px; margin: 0; padding: 12px; }
+.session-options :deep(.el-radio__label) { white-space: normal; line-height: 1.6; }
 .hall {
   display: flex;
   flex-direction: column;

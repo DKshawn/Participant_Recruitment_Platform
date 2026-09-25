@@ -100,7 +100,8 @@ npm run user:role --prefix server -- 用户UUID researcher
 | `POST /auth/dev` | 仅本机开发账户登录 |
 | `GET /experiments` | 学生可报名列表／研究者本人实验 |
 | `POST /experiments`、`POST /experiments/:id/close` | 发布／结束招募，研究者本人 |
-| `POST /experiments/:id/enroll` | 学生报名 |
+| `POST /experiments/:id/sessions` | 本人实验追加场次，`{ sessions: [...] }` |
+| `POST /experiments/:id/enroll` | 学生报名；有场次的实验必须传 `{ session_id: "场次UUID" }` |
 | `GET /experiments/:id/enrollments` | 本人实验的参与者 |
 | `POST /enrollments/:id/complete` | 确认完成并发放一次报酬 |
 | `GET /me/profile` | 学生本人参与记录 |
@@ -109,14 +110,29 @@ npm run user:role --prefix server -- 用户UUID researcher
 
 ## 验证与静态演示
 
+### Docker Desktop 启动时报套接字无法访问
+
+如果错误指向 `%LOCALAPPDATA%\Docker\run\sailor-ingest.sock` 或 `%LOCALAPPDATA%\docker-secrets-engine\engine.sock`，这是 Docker Desktop 自身启动阶段的通信文件故障，尚未运行项目容器。Docker 官方仓库有[相同的 Windows 遗留套接字问题报告](https://github.com/docker/for-win/issues/15064)。
+
+恢复时先完全退出 Docker，检查上述两个目录仅包含临时套接字，再将故障目录改名备份，启动 Docker 让它自动重建。应同时检查两个位置，避免修复一个后卡在另一个。保留数据卷、WSL 磁盘及凭据配置，不使用恢复出厂设置或 `docker compose down -v`。最后用 `docker info` 和 `npm run db:up` 验证引擎与数据库健康状态。日常退出优先使用 Docker 自带的退出操作，避免强制结束进程留下失效文件。
+
+### 多场次与旧数据升级
+
+先启动数据库，运行 `npm run api:build` 和 `npm run db:migrate`，再启动应用。迁移 `002_experiment_sessions.sql` 增加场次表及报名的可空场次关联，不删除旧实验或旧报名。
+
+发布接口的 `sessions` 为 `{ starts_at, ends_at, capacity }` 数组，时间必须是带时区的 ISO 8601 字符串。最多 50 场，新增场次必须在未来、不能重叠或重复，场次长度不能短于实验时长，每场名额不能超过实验总人数。前端按 JST 输入及展示、按 UTC 发送；支持多选日期，也支持同一天分批增加不同开始时间。
+
+已有场次仅支持追加，暂不修改或删除。无场次的旧实验仍兼容报名；旧报名保留空场次。报名会同时校验每场容量及实验总容量，使用同一实验行锁串行处理并发请求；同一学生同一实验只能有一条报名。重复提交同一场返回原报名，尝试另选一场返回冲突。参与记录及研究者报名名单均包含所选场次，关闭实验后仍在研究者管理列表中保留。
+
 ```powershell
+npm run test:ui
 npm run api:test
 npm run build
 npm run build:demo
 ```
 
-`api:test` 启动真实 NestJS HTTP 服务，在 PostgreSQL 中创建随机独立测试 schema；结束时仅删除该 schema，不清空开发数据。涵盖匿名请求、Cookie、CSRF、数据校验、越权、并发名额、重复发放、评分审计、余额预留和退出失效。OIDC 使用进程内虚构提供方与 RSA 签名令牌验证授权码流程、PKCE、nonce、签名、受众、过期时间、学校限制和回调重放，不发送真实提供方请求。
+`test:ui` 覆盖旧演示数据兼容、刷新恢复、JST 跨日转换及场次校验。`api:test` 启动真实 NestJS HTTP 服务，在 PostgreSQL 中创建随机独立测试 schema；结束时仅删除该 schema，不清空开发数据。涵盖匿名请求、Cookie、CSRF、数据校验、越权、并发名额、每人一场、追加场次、旧报名兼容、重复发放、评分审计、余额预留和退出失效。OIDC 使用进程内虚构提供方与 RSA 签名令牌验证授权码流程、PKCE、nonce、签名、受众、过期时间、学校限制和回调重放，不发送真实提供方请求。
 
-`npm run build` 按当前环境构建，`npm run build:demo` 强制关闭 API 模式，不修改 `.env.local`。原 GitHub Pages 工作流在干净环境里仍是静态演示；本次不需要部署后端，也不需要更改线上 Pages 配置。
+`npm run build` 按当前环境构建，`npm run build:demo` 强制关闭 API 模式，不修改 `.env.local`。GitHub Pages 工作流执行静态回归测试后构建演示版，后端只在本机运行。静态发布、场次和报名会保存在当前浏览器，刷新后仍可查看，不向其他访客同步。
 
 OAuth 的成功回调必须在你创建真实应用、填好本机密钥之后再联调。当前测试不冒充 Google 或 Microsoft 登录成功。

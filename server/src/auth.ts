@@ -141,7 +141,7 @@ export class AuthController {
       const user = await this.auth.identity(claims.iss, claims.sub, email, typeof claims.name === 'string' ? claims.name.slice(0,200) : 'Participant');
       await this.auth.issue(user, req, res);
       res.clearCookie(OAUTH_STATE, this.auth.cookieOptions());
-      res.redirect(`${frontend}#/${user.role === 'researcher' ? 'researcher/publish' : 'student/hall'}`);
+      res.redirect(`${frontend}#/${user.role === 'researcher' ? 'researcher/manage' : 'student/hall'}`);
     } catch {
       // Never put authorization codes, tokens, email addresses, or provider errors in URLs/logs.
       res.clearCookie(OAUTH_STATE, this.auth.cookieOptions());

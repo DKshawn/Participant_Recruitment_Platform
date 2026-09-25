@@ -130,6 +130,81 @@ test('PostgreSQL API integration', async t => {
       assert.equal((await request('/subjects', { cookie: otherResearcher.cookie })).body.length, 0);
     });
 
+    const slot = (days: number, capacity = 1) => {
+      const start = Date.now() + days * 86400000;
+      return { starts_at: new Date(start).toISOString(), ends_at: new Date(start + 30 * 60000).toISOString(), capacity };
+    };
+    await t.test('scheduled publication validates atomically and researchers see their own published studies', async () => {
+      const first = slot(10), second = slot(11);
+      const created = await post('/experiments', researcher, { ...createBody, capacity: 3, min_reputation_required: 90, sessions: [second, first] });
+      assert.equal(created.status, 201);
+      assert.equal(created.body.sessions.length, 2);
+      assert.equal(created.body.sessions[0].starts_at, first.starts_at);
+      assert.equal((await request('/experiments', { cookie: researcher })).body.find((e: any) => e.id === created.body.id).status, 'published');
+      assert.equal((await request('/experiments', { cookie: otherResearcher.cookie })).body.some((e: any) => e.id === created.body.id), false);
+      assert.equal((await request('/experiments', { cookie: student })).body.some((e: any) => e.id === created.body.id), false);
+      const before = (await db!.query('SELECT count(*)::int AS n FROM experiments')).rows[0].n;
+      for (const sessions of [
+        [slot(-1)], [first, first], [first, { ...first, starts_at: new Date(Date.parse(first.starts_at) + 60000).toISOString() }],
+        [{ ...first, capacity: 4 }], [{ ...first, capacity: 1.5 }], [{ ...first, capacity: 0 }],
+        [{ ...first, starts_at: first.starts_at.slice(0, -1) }], [{ ...first, ends_at: first.starts_at }],
+        [{ ...first, owner_id: otherResearcher.id }], [null], Array(51).fill(first),
+      ]) {
+        assert.equal((await post('/experiments', researcher, { ...createBody, capacity: 3, sessions })).status, 400);
+      }
+      assert.equal((await db!.query('SELECT count(*)::int AS n FROM experiments')).rows[0].n, before);
+    });
+
+    await t.test('one selected session per student, concurrent session seats, records and total capacity', async () => {
+      const created = await post('/experiments', researcher, { ...createBody, capacity: 2, sessions: [slot(12), slot(13, 2)] });
+      assert.equal(created.status, 201);
+      const [first, second] = created.body.sessions;
+      const path = `/experiments/${created.body.id}/enroll`;
+      assert.equal((await post(path, student)).status, 400);
+      assert.equal((await post(path, student, { session_id: randomUUID() })).status, 400);
+      assert.equal((await post(path, student, { session_id: 'invalid' })).status, 400);
+      const students = [student, otherStudent.cookie];
+      const attempts = await Promise.all(students.map(cookie => post(path, cookie, { session_id: first.id })));
+      assert.deepEqual(attempts.map(r => r.status).sort(), [201, 409]);
+      const winner = attempts.findIndex(r => r.status === 201), loser = 1 - winner;
+      const repeat = await post(path, students[winner], { session_id: first.id });
+      assert.equal(repeat.body.id, attempts[winner].body.id);
+      assert.equal((await post(path, students[winner], { session_id: second.id })).status, 409);
+      assert.equal((await post(path, students[loser], { session_id: second.id })).status, 201);
+      const third = await sessionFor('student');
+      assert.equal((await post(path, third.cookie, { session_id: second.id })).status, 409);
+      const listed = (await request('/experiments', { cookie: researcher })).body.find((e: any) => e.id === created.body.id);
+      assert.deepEqual(listed.slots, { total: 2, filled: 2 });
+      assert.deepEqual(listed.sessions.map((s: any) => s.filled), [1, 1]);
+      const profile = (await request('/me/profile', { cookie: students[winner] })).body;
+      assert.deepEqual(profile.participations.find((p: any) => p.experimentId === created.body.id).session, { id: first.id, starts_at: first.starts_at, ends_at: first.ends_at });
+      const participants = (await request(`/experiments/${created.body.id}/enrollments`, { cookie: researcher })).body;
+      assert.equal(participants.length, 2);
+      assert.equal(participants[0].session_id, first.id);
+      assert.equal(participants[0].starts_at, first.starts_at);
+      assert.ok(participants.every((p: any) => p.email === undefined));
+    });
+
+    await t.test('session append preserves legacy enrollments, ownership, existing dates and expired-session rules', async () => {
+      const next = slot(15);
+      const path = `/experiments/${fixtures.experiment}/sessions`;
+      assert.equal((await post(path, otherResearcher.cookie, { sessions: [next] })).status, 404);
+      assert.equal((await post(path, student, { sessions: [next] })).status, 403);
+      assert.equal((await post(path, researcher, { sessions: [] })).status, 400);
+      const added = await post(path, researcher, { sessions: [next] });
+      assert.equal(added.status, 201);
+      assert.equal((await post(path, researcher, { sessions: [next] })).status, 400);
+      assert.equal((await db!.query('SELECT session_id FROM enrollments WHERE id=$1', [enrollmentId])).rows[0].session_id, null);
+      assert.equal((await post(`/experiments/${fixtures.experiment}/enroll`, student)).body.id, enrollmentId);
+      assert.equal((await post(`/experiments/${fixtures.experiment}/enroll`, student, { session_id: added.body[0].id })).status, 409);
+      const future = await post('/experiments', researcher, { ...createBody, sessions: [slot(20)] });
+      await db!.query("UPDATE experiment_sessions SET starts_at=now()-interval '1 hour',ends_at=now()-interval '30 minutes' WHERE experiment_id=$1", [future.body.id]);
+      assert.equal((await post(`/experiments/${future.body.id}/enroll`, student, { session_id: future.body.sessions[0].id })).status, 409);
+      await post(`/experiments/${future.body.id}/close`, researcher);
+      assert.equal((await post(`/experiments/${future.body.id}/sessions`, researcher, { sessions: [slot(21)] })).status, 409);
+      assert.equal((await request('/experiments', { cookie: researcher })).body.find((e: any) => e.id === future.body.id).status, 'closed');
+    });
+
     await t.test('redemption cannot overdraw, reserves once, and remains pending', async () => {
       assert.equal((await post('/wallet/redemptions', student, { amount: 1050 }, randomUUID())).status, 400);
       const keys = [randomUUID(), randomUUID()];

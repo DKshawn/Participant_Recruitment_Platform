@@ -1,7 +1,8 @@
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { defineStore } from 'pinia'
 import { mockExperiments } from '@/mocks/experiments'
 import { api, apiEnabled } from '@/services/api'
+import { normalizeExperiment, restoreExperiments } from '@/services/experiments'
 
 /**
  * 实验 Store（已发布实验的单一数据源）
@@ -13,12 +14,17 @@ import { api, apiEnabled } from '@/services/api'
  */
 export const useExperimentStore = defineStore('experiment', () => {
   // 已发布实验列表：初始由 mock 注入（深拷贝，避免改动源常量）
-  const published = ref(apiEnabled ? [] : mockExperiments.map((e) => ({ ...e })))
+  const published = ref(apiEnabled ? [] : restoreExperiments({ getItem: key => window.localStorage.getItem(key) }, mockExperiments))
+  const storageError = ref(false)
+  if (!apiEnabled) watch(published, value => {
+    try { localStorage.setItem('actmind.demo.experiments.v1', JSON.stringify(value)); storageError.value = false }
+    catch { storageError.value = true }
+  }, { deep: true, flush: 'sync' })
 
   async function load() {
     if (!apiEnabled) return
     published.value = []
-    published.value = await api('/experiments')
+    published.value = (await api('/experiments')).map(normalizeExperiment)
   }
 
   const totalPublished = computed(() => published.value.length)
@@ -31,17 +37,18 @@ export const useExperimentStore = defineStore('experiment', () => {
   /** 新增（发布）一个实验：自动补 id / 创建时间，插入列表顶部 */
   async function add(exp) {
     if (apiEnabled) {
-      const body = Object.fromEntries(['title', 'description', 'required_items', 'tags', 'tagsLocales', 'location_type', 'location_detail', 'reward_points', 'duration_minutes', 'min_reputation_required'].map(k => [k, exp[k]]))
+      const body = Object.fromEntries(['title', 'description', 'required_items', 'tags', 'tagsLocales', 'location_type', 'location_detail', 'reward_points', 'duration_minutes', 'min_reputation_required', 'sessions'].map(k => [k, exp[k]]))
       body.capacity = exp.slots.total
       const saved = await api('/experiments', { method: 'POST', body })
       published.value.unshift(saved)
       return saved
     }
-    const newExp = {
+    const newExp = normalizeExperiment({
       ...exp,
-      id: `exp_${Date.now()}`,
+      id: `exp_${crypto.randomUUID()}`,
+      sessions: (exp.sessions || []).map(s => ({ ...s, id: crypto.randomUUID(), filled: 0 })),
       createdAt: new Date().toISOString(),
-    }
+    })
     published.value.unshift(newExp)
     return newExp
   }
@@ -53,7 +60,25 @@ export const useExperimentStore = defineStore('experiment', () => {
     if (idx > -1) published.value.splice(idx, 1)
   }
 
+  async function close(id) {
+    if (apiEnabled) await api(`/experiments/${id}/close`, { method: 'POST' })
+    const exp = getById(id)
+    if (exp) exp.status = 'closed'
+  }
+
+  async function addSessions(id, sessions) {
+    if (apiEnabled) {
+      await api(`/experiments/${id}/sessions`, { method: 'POST', body: { sessions } })
+      await load()
+    } else {
+      const exp = getById(id)
+      exp.sessions.push(...sessions.map(s => ({ ...s, id: crypto.randomUUID(), filled: 0 })))
+      exp.sessions.sort((a, b) => a.starts_at.localeCompare(b.starts_at))
+    }
+  }
+
   return {
+    close, addSessions, storageError,
     load,
     published,
     totalPublished,
