@@ -3,11 +3,19 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "行知被试库 (ActMind Pool) — 行为经济学/心理学实验的被试管理与定向分发平台（纯前端演示版）",
+  "description": "行知被试库 (ActMind Pool) — Vue 演示前端与 NestJS / PostgreSQL 本机后端",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "api:install": "npm ci --prefix server",
+    "api:build": "npm run build --prefix server",
+    "api:test": "npm test --prefix server",
+    "db:up": "docker compose up -d --wait db",
+    "db:migrate": "npm run db:migrate --prefix server",
+    "db:seed": "npm run db:seed --prefix server",
+    "dev:full": "npm run api:build && node scripts/dev.mjs",
+    "build:demo": "node scripts/build-demo.mjs"
   },
   "dependencies": {
     "@element-plus/icons-vue": "^2.3.1",

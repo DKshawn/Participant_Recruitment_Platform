@@ -1,0 +1,36 @@
+{
+  "name": "actmind-api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=22.12.0" },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "node --env-file-if-exists=.env dist/src/main.js",
+    "dev": "npm run build && npm start",
+    "db:migrate": "node --env-file-if-exists=.env dist/src/migrate.js",
+    "db:seed": "node --env-file-if-exists=.env dist/src/seed.js",
+    "user:role": "node --env-file-if-exists=.env dist/src/set-role.js",
+    "test": "npm run build && node --env-file-if-exists=.env --test dist/test/*.test.js"
+  },
+  "dependencies": {
+    "@nestjs/common": "^12.1.0",
+    "@nestjs/core": "^12.1.0",
+    "@nestjs/platform-express": "^12.1.0",
+    "class-transformer": "^0.5.1",
+    "class-validator": "^0.14.2",
+    "cookie-parser": "^1.4.7",
+    "helmet": "^8.1.0",
+    "openid-client": "^6.8.8",
+    "pg": "^8.23.0",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.2"
+  },
+  "devDependencies": {
+    "@types/cookie-parser": "^1.4.9",
+    "@types/express": "^5.0.3",
+    "@types/node": "^22.0.0",
+    "@types/pg": "^8.15.5",
+    "typescript": "~5.9.3"
+  }
+}

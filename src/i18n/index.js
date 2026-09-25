@@ -1,4 +1,5 @@
 import { createI18n } from 'vue-i18n'
+import backend from './backend'
 import zh from './locales/zh'
 import en from './locales/en'
 import ja from './locales/ja'
@@ -77,9 +78,9 @@ const i18n = createI18n({
   missingWarn: false,
   fallbackWarn: false,
   messages: {
-    'zh-CN': zh,
-    'en-US': en,
-    'ja-JP': ja,
+    'zh-CN': { ...zh, backend: backend['zh-CN'] },
+    'en-US': { ...en, backend: backend['en-US'] },
+    'ja-JP': { ...ja, backend: backend['ja-JP'] },
   },
 })
 

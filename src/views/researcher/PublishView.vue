@@ -1,5 +1,5 @@
 <script setup>
-import { reactive, ref, computed } from 'vue'
+import { reactive, ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -34,6 +34,10 @@ const experimentStore = useExperimentStore()
 const { t, locale } = useI18n() // i18n：script 内使用 t()，模板内使用 $t()
 
 const formRef = ref(null)
+const submitting = ref(false)
+onMounted(async () => {
+  try { await subjectStore.load('researcher') } catch (error) { ElMessage.error(error.message) }
+})
 
 /* Step 16：发布者（研究者）姓名同为 {zh,ja,en} 对象，按当前界面语言择优展示 */
 const publisherName = computed(
@@ -271,9 +275,12 @@ function genCode() {
 
 /** 发布实验 */
 async function handlePublish() {
+  if (submitting.value) return
+  submitting.value = true
   try {
     await formRef.value.validate()
   } catch {
+    submitting.value = false
     ElMessage.error(t('publish.checkFields'))
     return
   }
@@ -299,6 +306,7 @@ async function handlePublish() {
       },
     )
   } catch {
+    submitting.value = false
     return // 用户取消
   }
 
@@ -316,7 +324,7 @@ async function handlePublish() {
     // 发布时取当前类型对应的字段，统一落到 location_detail 供下游展示
     location_detail:
       form.locationType === 'online'
-        ? form.onlineUrl.trim()
+        ? (/^https?:\/\//i.test(form.onlineUrl.trim()) ? form.onlineUrl.trim() : `https://${form.onlineUrl.trim()}`)
         : form.offlineAddress.trim(),
     required_items: { ...form.requiredItems },
     slots: { total: form.participants, filled: 0 },
@@ -330,9 +338,13 @@ async function handlePublish() {
     publishedBy: publisherName.value,
   }
 
-  experimentStore.add(exp)
-  ElMessage.success(t('publish.publishSuccess', { name: bestTitle }))
-  router.push('/researcher/manage')
+  submitting.value = true
+  try {
+    await experimentStore.add(exp)
+    ElMessage.success(t('publish.publishSuccess', { name: bestTitle }))
+    await router.push('/researcher/manage')
+  } catch (error) { ElMessage.error(error.message) }
+  finally { submitting.value = false }
 }
 
 /** 重置表单 */
@@ -363,6 +375,7 @@ function handleReset() {
     <el-card shadow="never" class="form-card">
       <el-form
         ref="formRef"
+        :disabled="submitting"
         :model="form"
         :rules="rules"
         label-position="top"
@@ -582,7 +595,7 @@ function handleReset() {
             <el-icon><RefreshLeft /></el-icon>
             {{ $t('common.reset') }}
           </el-button>
-          <el-button type="primary" size="large" class="publish-btn" @click="handlePublish">
+          <el-button type="primary" size="large" class="publish-btn" :loading="submitting" @click="handlePublish">
             <el-icon><Promotion /></el-icon>
             {{ $t('publish.publishBtn') }}
           </el-button>

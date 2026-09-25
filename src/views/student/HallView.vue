@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, ref, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useI18n } from 'vue-i18n'
 import {
@@ -17,6 +17,7 @@ import { useUserStore } from '@/stores/user'
 import { useSubjectStore } from '@/stores/subject'
 import { useExperimentStore } from '@/stores/experiment'
 import { pickLocalized } from '@/i18n'
+import { apiEnabled } from '@/services/api'
 
 /**
  * 学生端 · 实验大厅（Step 15：JSONB 多语言结构 + 结构化卡片 + 详情弹窗）
@@ -27,7 +28,7 @@ import { pickLocalized } from '@/i18n'
  *  - location_detail → 字符串（线下楼宇/房间号，或线上实验链接）
  *  - reward_points   → 数值（积分，1 积分 = 1 日元）
  *  - duration_minutes → 数值（分钟）
- *  - min_reputation_required → 数值（隐藏信誉分门槛，仅用于前端过滤）
+ *  - min_reputation_required → 仅静态演示在前端过滤；API 模式不向学生返回该字段
  *
  * 国际化：
  *  - 多语言字段由 pickLocalized() 按当前界面语言择优（当前语言 → zh → en → ja）
@@ -38,21 +39,32 @@ const user = useUserStore()
 const subjectStore = useSubjectStore()
 const experimentStore = useExperimentStore()
 const { t, locale, te } = useI18n()
+const loading = ref(false)
+const loadError = ref('')
+const enrolling = ref(false)
+async function load() {
+  loading.value = true
+  loadError.value = ''
+  try { await Promise.all([subjectStore.load('student'), experimentStore.load()]) }
+  catch (error) { loadError.value = error.message }
+  finally { loading.value = false }
+}
+onMounted(load)
 
-// 当前登录学生（完整数据，含隐藏信誉分）
+// API 模式只接收本人公开资料与参与记录，不接收隐藏信誉分。
 const current = computed(() => subjectStore.getById(user.student?.id))
 
 /* Step 16：name 为 {zh,ja,en} 多语言对象，按当前界面语言择优显示姓名
    （中文名→日语片假名/英语拼音；日文名→罗马音；欧美名→原名，随界面语言实时切换） */
 const displayName = computed(() => pickLocalized(current.value?.name, locale.value))
 
-// 【核心】隐藏信誉分：仅用于前端过滤，界面上绝不展示其具体数值
+// 仅静态演示使用模拟信誉分过滤；真实模式由服务端筛选。
 const reputation = computed(() => current.value?.reputation ?? 0)
 
 // ---------- 定向分发：前端过滤逻辑 ----------
 const visibleExperiments = computed(() =>
   experimentStore.published.filter(
-    (e) => e.min_reputation_required <= reputation.value,
+    (e) => apiEnabled || e.min_reputation_required <= reputation.value,
   ),
 )
 const lockedCount = computed(
@@ -96,10 +108,16 @@ function isEnrolled(exp) {
     (p) => p.experimentId === exp.id,
   )
 }
-function handleEnroll(exp) {
-  if (!current.value || !exp || isEnrolled(exp)) return
-  subjectStore.enroll(current.value.id, exp)
-  ElMessage.success(t('hall.enrollSuccess', { name: locText(exp, 'title') }))
+async function handleEnroll(exp) {
+  if (!current.value || !exp || isEnrolled(exp) || enrolling.value) return
+  enrolling.value = true
+  try {
+    await subjectStore.enroll(current.value.id, exp)
+    ElMessage.success(t('hall.enrollSuccess', { name: locText(exp, 'title') }))
+    detailVisible.value = false
+    await experimentStore.load()
+  } catch (error) { ElMessage.error(error.message) }
+  finally { enrolling.value = false }
 }
 
 // ---------- 实验详情弹窗（Step 15 新增交互） ----------
@@ -113,7 +131,6 @@ function openDetail(exp) {
 function handleEnrollFromDetail() {
   if (!detailExp.value) return
   handleEnroll(detailExp.value)
-  detailVisible.value = false
 }
 
 // ---------- 卡片标签判断 ----------
@@ -123,6 +140,10 @@ const isHighReward = (exp) => (exp.reward_points ?? 0) >= 5000
 </script>
 
 <template>
+  <div class="hall-page">
+  <p v-if="loading">{{ $t('backend.loading') }}</p>
+  <el-alert v-if="loadError" :title="loadError" type="error" :closable="false" />
+  <el-button v-if="loadError" @click="load">{{ $t('backend.retry') }}</el-button>
   <div class="hall" v-if="current">
     <!-- ==================== 顶部：学生信息卡 ==================== -->
     <section class="info-card">
@@ -132,7 +153,7 @@ const isHighReward = (exp) => (exp.reward_points ?? 0) >= 5000
           <div class="info-name">{{ displayName }}</div>
           <!-- Step 13：专业/年级由 i18n key 动态翻译（心理学 · 大二 / 学部2年 / 2nd-Year…）
                与上行姓名合起来即「name | major · grade」格式，姓名不重复渲染 -->
-          <div class="info-major">
+          <div v-if="current.majorKey" class="info-major">
             {{ $t(current.majorKey) }} · {{ $t(current.gradeKey) }}
           </div>
           <div class="info-joined">
@@ -289,7 +310,7 @@ const isHighReward = (exp) => (exp.reward_points ?? 0) >= 5000
               type="primary"
               size="large"
               class="enroll-btn"
-              :disabled="isEnrolled(exp)"
+              :disabled="isEnrolled(exp) || enrolling || (apiEnabled && exp.slots.filled >= exp.slots.total)"
               @click="handleEnroll(exp)"
             >
               <el-icon v-if="isEnrolled(exp)"><Check /></el-icon>
@@ -357,7 +378,7 @@ const isHighReward = (exp) => (exp.reward_points ?? 0) >= 5000
         <el-button @click="detailVisible = false">{{ $t('common.cancel') }}</el-button>
         <el-button
           type="primary"
-          :disabled="detailExp && isEnrolled(detailExp)"
+          :disabled="enrolling || (detailExp && (isEnrolled(detailExp) || (apiEnabled && detailExp.slots.filled >= detailExp.slots.total)))"
           @click="handleEnrollFromDetail"
         >
           {{
@@ -368,6 +389,7 @@ const isHighReward = (exp) => (exp.reward_points ?? 0) >= 5000
         </el-button>
       </template>
     </el-dialog>
+  </div>
   </div>
 </template>
 

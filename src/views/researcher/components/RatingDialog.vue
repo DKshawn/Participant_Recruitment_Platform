@@ -25,18 +25,21 @@ const emit = defineEmits(['update:modelValue', 'confirm'])
 
 const user = useUserStore()
 const subjectStore = useSubjectStore()
-const { t, locale } = useI18n() // i18n：script 内使用 t()，模板内使用 $t()
+const { t, tm, locale } = useI18n()
 
 /* Step 16：name 为 {zh,ja,en} 对象，被试姓名按当前界面语言择优（模板与消息共用） */
 const locName = (s) => pickLocalized(s?.name, locale.value)
 
 const formRef = ref(null)
+const submitting = ref(false)
+const requestKey = ref(crypto.randomUUID())
 
 const form = reactive({
   direction: 'add', // 'add' 加分 | 'sub' 扣分
   points: 5, // 分值
   reason: '', // 理由（必填）
 })
+watch(() => [form.direction, form.points, form.reason, props.subject?.id], () => { requestKey.value = crypto.randomUUID() })
 
 // 校验规则：computed 保证切换语言后错误提示同步更新
 const rules = computed(() => ({
@@ -47,7 +50,7 @@ const rules = computed(() => ({
 }))
 
 // 常用理由快捷填入（提升清洗效率；字典中为数组型 key，随语言实时切换）
-const quickReasons = computed(() => t('rating.quickReasons', 'string:array'))
+const quickReasons = computed(() => tm('rating.quickReasons'))
 
 /* Step 16：操作人（研究者）姓名同为 {zh,ja,en} 对象，按当前界面语言择优 */
 const operator = computed(
@@ -72,16 +75,21 @@ function fillReason(text) {
 }
 
 async function handleConfirm() {
+  if (submitting.value) return
   try {
     await formRef.value.validate()
   } catch {
     return
   }
-  subjectStore.adjustReputation(
+  submitting.value = true
+  const originalScore = before.value
+  try {
+  const updatedScore = await subjectStore.adjustReputation(
     props.subject.id,
     delta.value,
     form.reason.trim(),
     operator.value,
+    requestKey.value,
   )
   emit('confirm', { id: props.subject.id, delta: delta.value })
   ElMessage.success(
@@ -89,11 +97,13 @@ async function handleConfirm() {
       name: locName(props.subject),
       dir: dirWord.value,
       n: Math.abs(delta.value),
-      before: before.value,
-      after: after.value,
+      before: originalScore,
+      after: updatedScore,
     }),
   )
   handleClose()
+  } catch (error) { ElMessage.error(error.message) }
+  finally { submitting.value = false }
 }
 
 function handleClose() {
@@ -105,6 +115,7 @@ watch(
   () => props.modelValue,
   (v) => {
     if (v) {
+      requestKey.value = crypto.randomUUID()
       form.direction = 'add'
       form.points = 5
       form.reason = ''
@@ -121,6 +132,8 @@ watch(
     width="520px"
     align-center
     :close-on-click-modal="false"
+    :close-on-press-escape="!submitting"
+    :show-close="!submitting"
     @update:model-value="(v) => emit('update:modelValue', v)"
     @closed="formRef?.clearValidate()"
   >
@@ -142,7 +155,7 @@ watch(
           </div>
           <div class="s-id">
             <!-- Step 13：专业/年级由 i18n key 动态翻译 -->
-            {{ subject.id }} · {{ $t(subject.majorKey) }} · {{ $t(subject.gradeKey) }}
+            {{ subject.id }} <span v-if="subject.majorKey">· {{ $t(subject.majorKey) }} · {{ $t(subject.gradeKey) }}</span>
           </div>
         </div>
       </div>
@@ -168,6 +181,7 @@ watch(
       <!-- 评分表单 -->
       <el-form
         ref="formRef"
+        :disabled="submitting"
         :model="form"
         :rules="rules"
         label-position="top"
@@ -232,8 +246,8 @@ watch(
     </template>
 
     <template #footer>
-      <el-button @click="handleClose">{{ $t('common.cancel') }}</el-button>
-      <el-button type="primary" @click="handleConfirm">{{ $t('rating.confirm') }}</el-button>
+      <el-button :disabled="submitting" @click="handleClose">{{ $t('common.cancel') }}</el-button>
+      <el-button type="primary" :loading="submitting" @click="handleConfirm">{{ $t('rating.confirm') }}</el-button>
     </template>
   </el-dialog>
 </template>

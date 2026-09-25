@@ -1,8 +1,9 @@
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Wallet, Link as LinkIcon, CreditCard } from '@element-plus/icons-vue'
+import { api, apiEnabled } from '@/services/api'
 
 /**
  * 学生端：积分钱包（Step 12：积分系统与 PayPay 积分兑换页）
@@ -34,7 +35,25 @@ const MIN_EXCHANGE = 1000
 const BOUNDED_ACCOUNT = '090-****-1234'
 
 /** 区块 A：当前可用积分（Mock） */
-const balance = ref(1500)
+const balance = ref(apiEnabled ? 0 : 1500)
+const loading = ref(false)
+const submitting = ref(false)
+const loadError = ref('')
+const ledger = ref([])
+const requestKey = ref(crypto.randomUUID())
+async function load() {
+  if (!apiEnabled) return
+  loading.value = true
+  loadError.value = ''
+  try {
+    const wallet = await api('/wallet')
+    balance.value = wallet.balance
+    historyList.value = wallet.history
+    ledger.value = wallet.ledger
+  } catch (error) { loadError.value = error.message }
+  finally { loading.value = false }
+}
+onMounted(load)
 
 /** 区块 B：PayPay 绑定状态（Mock：初始未绑定） */
 const isPayPayBound = ref(false)
@@ -43,9 +62,10 @@ const binding = ref(false)
 
 /** 区块 B：兑换金额输入值 */
 const amount = ref(null)
+watch(amount, () => { requestKey.value = crypto.randomUUID() })
 
 /** 区块 C：兑换历史记录（Mock 2-3 条；新兑换成功时 unshift 到最前） */
-const historyList = ref([
+const historyList = ref(apiEnabled ? [] : [
   {
     id: 'ex_20260211',
     time: new Date('2026-02-11T14:32:00'),
@@ -92,7 +112,7 @@ const amountError = computed(() => {
  *  2) 金额必须合法（>= 1000 且 <= 余额，由 amountError 统一判定）。
  */
 const canExchange = computed(
-  () => isPayPayBound.value && amount.value != null && !amountError.value,
+  () => (apiEnabled || isPayPayBound.value) && amount.value != null && !amountError.value && amount.value % 100 === 0 && !loading.value && !loadError.value && !submitting.value,
 )
 
 /* ---------------------- 行为动作 ---------------------- */
@@ -116,10 +136,13 @@ function bindPayPay() {
  *  ElMessageBox 弹出「确认将 N 积分兑换至您的 PayPay 账户吗？」，
  *  确认后：扣减余额 → 新增一条「处理中」历史记录 → 成功提示 → 清空输入。
  */
-function confirmExchange() {
+async function confirmExchange() {
+  if (!canExchange.value) return
   const n = amount.value
-  ElMessageBox.confirm(
-    t('wallet.confirmText', { n: n.toLocaleString() }),
+  submitting.value = true
+  try {
+  await ElMessageBox.confirm(
+    t(apiEnabled ? 'backend.requestConfirm' : 'wallet.confirmText', { n: n.toLocaleString() }),
     t('wallet.confirmTitle'),
     {
       type: 'warning',
@@ -127,7 +150,14 @@ function confirmExchange() {
       cancelButtonText: t('common.cancel'),
     },
   )
-    .then(() => {
+  } catch { submitting.value = false; return }
+  try {
+    if (apiEnabled) {
+      await api('/wallet/redemptions', { method: 'POST', body: { amount: n }, key: requestKey.value })
+      ElMessage.success(t('backend.requested'))
+      amount.value = null
+      await load()
+    } else {
       balance.value -= n
       historyList.value.unshift({
         id: `ex_${Date.now()}`,
@@ -138,10 +168,9 @@ function confirmExchange() {
       })
       amount.value = null
       ElMessage.success(t('wallet.success', { n: n.toLocaleString() }))
-    })
-    .catch(() => {
-      /* 用户取消：不做任何处理 */
-    })
+    }
+  } catch (error) { ElMessage.error(error.message) }
+  finally { submitting.value = false }
 }
 
 /** 历史记录时间格式化（随当前界面语言本地化） */
@@ -154,14 +183,16 @@ function fmtTime(d) {
 </script>
 
 <template>
-  <div class="wallet-page">
+  <div class="wallet-page" v-loading="loading">
+    <el-alert v-if="loadError" :title="loadError" type="error" :closable="false" />
+    <el-button v-if="loadError" @click="load">{{ $t('backend.retry') }}</el-button>
     <!-- ============ 页头 ============ -->
     <header class="wallet-header">
       <div class="head-main">
         <el-icon class="head-icon"><Wallet /></el-icon>
         <div>
           <h1 class="head-title">{{ $t('wallet.title') }}</h1>
-          <p class="head-desc">{{ $t('wallet.desc') }}</p>
+          <p class="head-desc">{{ $t(apiEnabled ? 'backend.requestHint' : 'wallet.desc') }}</p>
         </div>
       </div>
     </header>
@@ -190,12 +221,12 @@ function fmtTime(d) {
       <section class="exchange-card">
         <!-- 卡片头：PayPay 文字 Logo 占位 + 区块标题 -->
         <div class="ex-head">
-          <div class="paypay-logo">PayPay</div>
-          <span class="ex-title">{{ $t('wallet.payPayTitle') }}</span>
+          <div v-if="!apiEnabled" class="paypay-logo">PayPay</div>
+          <span class="ex-title">{{ $t(apiEnabled ? 'backend.requests' : 'wallet.payPayTitle') }}</span>
         </div>
 
         <!-- B-1 账户绑定状态 -->
-        <div class="bind-row">
+        <div v-if="!apiEnabled" class="bind-row">
           <template v-if="isPayPayBound">
             <!-- 已绑定：成功徽标 + 脱敏账号 -->
             <el-tag type="success" effect="light" round>
@@ -228,6 +259,8 @@ function fmtTime(d) {
           <div class="amount-input-wrap">
             <el-input-number
               v-model="amount"
+              :disabled="submitting"
+              :step-strictly="apiEnabled"
               :step="100"
               :min="0"
               :precision="0"
@@ -246,9 +279,10 @@ function fmtTime(d) {
           type="primary"
           class="exchange-btn"
           :disabled="!canExchange"
+          :loading="submitting"
           @click="confirmExchange"
         >
-          {{ $t('wallet.exchangeBtn') }}
+          {{ $t(apiEnabled ? 'backend.request' : 'wallet.exchangeBtn') }}
         </el-button>
       </section>
     </div>
@@ -274,7 +308,7 @@ function fmtTime(d) {
               round
             >
               {{
-                row.status === 'done'
+                apiEnabled ? $t('backend.' + row.status) : row.status === 'done'
                   ? $t('wallet.statusDone')
                   : $t('wallet.statusProcessing')
               }}
@@ -283,12 +317,20 @@ function fmtTime(d) {
         </el-table-column>
         <el-table-column :label="$t('wallet.colChannel')" min-width="110">
           <template #default="{ row }">
-            <span class="his-channel">{{ $t('wallet.channelPayPay') }}</span>
+            <span class="his-channel">{{ $t(apiEnabled ? 'backend.requestChannel' : 'wallet.channelPayPay') }}</span>
           </template>
         </el-table-column>
         <template #empty>
           <div class="his-empty">{{ $t('wallet.emptyHistory') }}</div>
         </template>
+      </el-table>
+    </section>
+    <section v-if="apiEnabled" class="history-card">
+      <h2 class="his-title">{{ $t('backend.ledger') }}</h2>
+      <el-table :data="ledger" :empty-text="$t('backend.empty')">
+        <el-table-column :label="$t('backend.time')"><template #default="{ row }">{{ fmtTime(row.created_at) }}</template></el-table-column>
+        <el-table-column :label="$t('backend.actions')"><template #default="{ row }">{{ $t('backend.' + row.kind) }}</template></el-table-column>
+        <el-table-column prop="amount" :label="$t('backend.amount')" />
       </el-table>
     </section>
   </div>

@@ -10,6 +10,8 @@ import HallView from '@/views/student/HallView.vue'
 import StudentWallet from '@/views/student/StudentWallet.vue'
 import PublishView from '@/views/researcher/PublishView.vue'
 import PoolView from '@/views/researcher/PoolView.vue'
+import ManageView from '@/views/researcher/ManageView.vue'
+import RecordsView from '@/views/student/RecordsView.vue'
 
 /**
  * 各端「首页」映射：已登录用户访问登录页时据此纠正回自己的工作台
@@ -114,7 +116,7 @@ const routes = [
       {
         path: 'records',
         name: 'StudentRecords',
-        component: PlaceholderView,
+        component: RecordsView,
         meta: {
           requiresAuth: true,
           role: 'student',
@@ -157,7 +159,7 @@ const routes = [
       {
         path: 'manage',
         name: 'ResearcherManage',
-        component: PlaceholderView,
+        component: ManageView,
         meta: {
           requiresAuth: true,
           role: 'researcher',
@@ -237,12 +239,12 @@ const router = createRouter({
  *
  *  ④ 其余情况放行。
  *
- * 会话来源：useUserStore() —— 该 Pinia store 在初始化时已从
- * localStorage（actmind.session：{ token, role, id }）水合，
- * 满足「从 localStorage 或状态管理库读取 token 与 userRole」的要求。
+ * API 模式通过 /auth/me 恢复 HttpOnly Cookie 会话，角色以数据库为准；
+ * 静态演示从 localStorage 恢复模拟身份。路由守卫仅负责导航体验，
+ * 业务权限与实验归属始终由服务端独立校验。
  * ============================================================================
  */
-router.beforeEach((to) => {
+router.beforeEach(async (to) => {
   // —— 0) 更新浏览器标签页标题（随当前语言实时翻译）——
   const t = i18n.global.t
   const appTitle = t('app.name')
@@ -251,6 +253,11 @@ router.beforeEach((to) => {
 
   const user = useUserStore()
   const isPublic = to.meta?.public === true
+  try {
+    await user.initialize()
+  } catch {
+    return isPublic ? true : { path: '/', query: { auth_error: 'server_unavailable' } }
+  }
 
   // ① 未登录：白名单放行，其余一律回通用门户（不区分目标角色，零提示）
   if (!user.isLoggedIn) {

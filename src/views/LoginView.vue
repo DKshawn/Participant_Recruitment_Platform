@@ -1,10 +1,11 @@
 <script setup>
-import { ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, onMounted } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
 import { Loading } from '@element-plus/icons-vue' // Loading 旋转图标（遮罩层使用）
 import { useUserStore } from '@/stores/user'
+import { api, apiEnabled, API_BASE } from '@/services/api'
 
 /**
  * 登录页（Step 14 修订：多入口隔离 SSO 模式）
@@ -47,6 +48,33 @@ const props = defineProps({
 const router = useRouter()
 const user = useUserStore()
 const { t } = useI18n()
+const route = useRoute()
+const providers = ref({})
+const serviceError = ref('')
+const devLoading = ref(false)
+async function loadProviders() {
+  if (!apiEnabled) return
+  serviceError.value = ''
+  try { providers.value = await api('/auth/providers') }
+  catch { serviceError.value = t('backend.unavailable') }
+}
+onMounted(() => {
+  loadProviders()
+  if (route.query.auth_error) ElMessage.error(t('backend.loginFailed'))
+})
+function realLogin(provider, audience = 'general') {
+  const enabled = audience === 'school' ? providers.value.school : providers.value[provider]
+  if (!enabled) return
+  window.location.assign(`${API_BASE}/auth/login/${provider}?audience=${audience}`)
+}
+async function localLogin(role) {
+  devLoading.value = true
+  try {
+    await user.loginDevelopment(role)
+    await router.push(user.isResearcher ? '/researcher/publish' : '/student/hall')
+  } catch (error) { ElMessage.error(error.message) }
+  finally { devLoading.value = false }
+}
 
 /* ============ 区域 A：TUS 官方域名白名单与强制校验 ============ */
 
@@ -131,6 +159,7 @@ function destination() {
  *              不写入 Token、不跳转（用户可再次点击重试，邮箱随机重抽）
  */
 function handleTusLogin() {
+  if (apiEnabled) return realLogin('microsoft', 'school')
   if (ssoLoading.value) return
   ssoProvider.value = 'microsoft'
   ssoLoading.value = true
@@ -161,6 +190,7 @@ function handleTusLogin() {
  * @param {'microsoft'|'google'} provider 授权提供方
  */
 function handleExternalLogin(provider) {
+  if (apiEnabled) return realLogin(provider)
   if (ssoLoading.value) return
   ssoProvider.value = provider
   ssoLoading.value = true
@@ -224,7 +254,7 @@ function handleExternalLogin(provider) {
         <el-tab-pane :label="$t('login.tabTus')" name="tus">
           <div class="tab-pane-body">
             <!-- 本区唯一按钮：理科大 Microsoft 账号（黑底 + 标准四色 Logo） -->
-            <button class="sso-btn sso-btn-ms" @click="handleTusLogin">
+            <button class="sso-btn sso-btn-ms" :disabled="apiEnabled && !providers.school" @click="handleTusLogin">
               <!-- Microsoft 官方四色 Logo（inline SVG，不依赖外部资源） -->
               <svg class="sso-logo" viewBox="0 0 21 21" width="22" height="22" aria-hidden="true">
                 <rect x="1" y="1" width="9" height="9" fill="#f25022" />
@@ -244,7 +274,7 @@ function handleExternalLogin(provider) {
         <el-tab-pane :label="$t('login.tabExternal')" name="external">
           <div class="tab-pane-body">
             <!-- 按钮 1：Microsoft（黑底 + 标准四色 Logo） -->
-            <button class="sso-btn sso-btn-ms" @click="handleExternalLogin('microsoft')">
+            <button class="sso-btn sso-btn-ms" :disabled="apiEnabled && !providers.microsoft" @click="handleExternalLogin('microsoft')">
               <svg class="sso-logo" viewBox="0 0 21 21" width="22" height="22" aria-hidden="true">
                 <rect x="1" y="1" width="9" height="9" fill="#f25022" />
                 <rect x="11" y="1" width="9" height="9" fill="#7fba00" />
@@ -255,7 +285,7 @@ function handleExternalLogin(provider) {
             </button>
 
             <!-- 按钮 2：Google（白底 + 标准 G 标） -->
-            <button class="sso-btn sso-btn-g" @click="handleExternalLogin('google')">
+            <button class="sso-btn sso-btn-g" :disabled="apiEnabled && !providers.google" @click="handleExternalLogin('google')">
               <!-- Google 官方「G」标（inline SVG，四色标准配色） -->
               <svg class="sso-logo" viewBox="0 0 48 48" width="22" height="22" aria-hidden="true">
                 <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z" />
@@ -267,10 +297,21 @@ function handleExternalLogin(provider) {
             </button>
 
             <!-- 外部通用入口提示（i18n：供非 TUS 的合作研究者或被试使用） -->
-            <p class="domain-hint">{{ $t('login.extHint') }}</p>
+            <p class="domain-hint">{{ $t(apiEnabled ? 'backend.microsoftTenant' : 'login.extHint') }}</p>
           </div>
         </el-tab-pane>
       </el-tabs>
+      <template v-if="apiEnabled">
+        <el-alert v-if="serviceError" :title="serviceError" type="error" :closable="false" />
+        <el-button v-if="serviceError" @click="loadProviders">{{ $t('backend.retry') }}</el-button>
+        <el-alert v-else-if="!providers.google || !providers.microsoft" :title="$t('backend.oauthPending')" type="info" :closable="false" />
+        <div v-if="providers.development" class="local-auth">
+          <h3>{{ $t('backend.localAuth') }}</h3>
+          <p class="domain-hint">{{ $t('backend.localHint') }}</p>
+          <el-button :loading="devLoading" type="primary" plain @click="localLogin('student')">{{ $t('backend.studentLogin') }}</el-button>
+          <el-button :loading="devLoading" @click="localLogin('researcher')">{{ $t('backend.researcherLogin') }}</el-button>
+        </div>
+      </template>
     </div>
 
     <!-- ============ 全屏 Loading 遮罩（模拟跳转认证中心） ============ -->
@@ -290,6 +331,9 @@ function handleExternalLogin(provider) {
 </template>
 
 <style scoped>
+.sso-btn:disabled { opacity: .45; cursor: not-allowed; }
+.local-auth { margin-top: 22px; padding-top: 16px; border-top: 1px solid #e5e7eb; }
+.local-auth .el-button { margin: 4px 6px 4px 0; }
 .login-page {
   height: 100vh;
   display: grid;

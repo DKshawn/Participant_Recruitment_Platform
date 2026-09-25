@@ -1,11 +1,12 @@
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Search, Star, Delete, Refresh, UserFilled, DataAnalysis } from '@element-plus/icons-vue'
 import { useSubjectStore } from '@/stores/subject'
 import RatingDialog from './components/RatingDialog.vue'
 import { pickLocalized } from '@/i18n'
+import { apiEnabled } from '@/services/api'
 
 /**
  * 研究者端 · 被试池管理
@@ -19,6 +20,16 @@ import { pickLocalized } from '@/i18n'
  * 说明：信誉分对学生端隐藏，仅研究者端可见并可调整。
  */
 const subjectStore = useSubjectStore()
+const loadError = ref('')
+const loading = ref(false)
+async function load() {
+  loading.value = true
+  loadError.value = ''
+  try { await subjectStore.load('researcher') }
+  catch (error) { loadError.value = error.message }
+  finally { loading.value = false }
+}
+onMounted(load)
 const { t, locale } = useI18n() // i18n：script 内使用 t()，模板内使用 $t()
 
 /* Step 16：name 为 {zh,ja,en} 对象，被试姓名按当前界面语言择优（模板与消息共用） */
@@ -111,6 +122,8 @@ function handleReset() {
 
 <template>
   <div class="pool">
+    <el-alert v-if="loadError" :title="loadError" type="error" :closable="false" />
+    <el-button v-if="loadError" @click="load">{{ $t('backend.retry') }}</el-button>
     <!-- 页头 -->
     <div class="page-head">
       <div>
@@ -160,6 +173,7 @@ function handleReset() {
 
       <!-- 数据表格 -->
       <el-table
+        v-loading="loading"
         :data="filtered"
         stripe
         border
@@ -179,7 +193,7 @@ function handleReset() {
               <div>
                 <div class="name-main">{{ locName(row) }}</div>
                 <!-- Step 13：专业/年级由 i18n key 动态翻译（随界面语言切换） -->
-                <div class="name-sub">
+                <div v-if="row.majorKey" class="name-sub">
                   {{ $t(row.majorKey) }} · {{ $t(row.gradeKey) }}
                 </div>
               </div>
@@ -231,7 +245,7 @@ function handleReset() {
               <el-icon><Star /></el-icon>
               {{ $t('pool.rating') }}
             </el-button>
-            <el-button type="danger" size="small" plain @click="handleRemove(row)">
+            <el-button v-if="!apiEnabled" type="danger" size="small" plain @click="handleRemove(row)">
               <el-icon><Delete /></el-icon>
             </el-button>
           </template>

@@ -1,5 +1,6 @@
 import { ref } from 'vue'
 import { defineStore } from 'pinia'
+import { api, apiEnabled } from '@/services/api'
 import { mockSubjects } from '@/mocks/subjects'
 import i18n, { pickLocalized } from '@/i18n' // Step 15：报名时按当前界面语言择优实验标题主文本
 
@@ -16,12 +17,18 @@ import i18n, { pickLocalized } from '@/i18n' // Step 15：报名时按当前界�
 export const useSubjectStore = defineStore('subject', () => {
   // 从 mock 深拷贝一份，避免直接改动源常量（数组字段单独浅拷贝即可满足演示需求）
   const list = ref(
-    mockSubjects.map((s) => ({
+    (apiEnabled ? [] : mockSubjects).map((s) => ({
       ...s,
       reputationLog: [...s.reputationLog],
       participations: [...s.participations],
     })),
   )
+
+  async function load(role) {
+    if (!apiEnabled) return
+    list.value = []
+    list.value = role === 'researcher' ? await api('/subjects') : [await api('/me/profile')]
+  }
 
   /** 按 id 获取被试 */
   function getById(id) {
@@ -36,7 +43,13 @@ export const useSubjectStore = defineStore('subject', () => {
    * @param {string} operator  操作人（研究者姓名）
    * @returns {number} 调整后的信誉分（限制在 0~100）
    */
-  function adjustReputation(id, delta, reason, operator = '研究者') {
+  async function adjustReputation(id, delta, reason, operator = '研究者', key) {
+    if (apiEnabled) {
+      const result = await api(`/subjects/${id}/reputation`, { method: 'POST', body: { delta, reason }, key })
+      const subject = getById(id)
+      if (subject) subject.reputation = result.after
+      return result.after
+    }
     const s = getById(id)
     if (!s) return
     const before = s.reputation
@@ -57,7 +70,12 @@ export const useSubjectStore = defineStore('subject', () => {
    * @param {string} subjectId 学生 id
    * @param {object} exp       实验对象（需含 id / name / reward）
    */
-  function enroll(subjectId, exp) {
+  async function enroll(subjectId, exp) {
+    if (apiEnabled) {
+      await api(`/experiments/${exp.id}/enroll`, { method: 'POST' })
+      await load('student')
+      return
+    }
     const s = getById(subjectId)
     if (!s) return
     // 【Step 15】兼容新 JSONB 结构：
@@ -80,6 +98,7 @@ export const useSubjectStore = defineStore('subject', () => {
 
   /** 从被试池中移除某位被试（仅影响当前演示数据） */
   function remove(id) {
+    if (apiEnabled) return
     const idx = list.value.findIndex((s) => s.id === id)
     if (idx > -1) list.value.splice(idx, 1)
   }
@@ -97,6 +116,7 @@ export const useSubjectStore = defineStore('subject', () => {
   }
 
   return {
+    load,
     list,
     getById,
     adjustReputation,

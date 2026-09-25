@@ -13,6 +13,7 @@ import {
   Check,
 } from '@element-plus/icons-vue'
 import { useUserStore } from '@/stores/user'
+import { apiEnabled } from '@/services/api'
 import { setLocale, SUPPORTED_LOCALES, pickLocalized } from '@/i18n'
 
 /**
@@ -82,14 +83,15 @@ function changeLang(code) {
 }
 
 /* ---------------- 角色切换 ---------------- */
-function handleCommand(command) {
+async function handleCommand(command) {
   if (command === 'logout') {
-    user.logout() // store 内部会同步清除 localStorage 会话
+    try { await user.logout() } catch (error) { ElMessage.error(error.message); return }
     ElMessage.success(t('nav.logoutDone'))
     // Step 11：退出后回到通用门户 /（旧 /login 已重定向至 /）
     router.push('/')
     return
   }
+  if (apiEnabled) return
   if (command === user.role) return
   user.switchRole(command)
   const home = command === 'student' ? '/student/hall' : '/researcher/publish'
@@ -187,13 +189,13 @@ function handleCommand(command) {
               </div>
             </div>
 
-            <el-dropdown-item disabled class="dropdown-section">
+            <el-dropdown-item v-if="!apiEnabled" disabled class="dropdown-section">
               {{ $t('nav.switchIdentity') }}
             </el-dropdown-item>
-            <el-dropdown-item command="student" :icon="User">
+            <el-dropdown-item v-if="!apiEnabled" command="student" :icon="User">
               {{ $t('nav.studentEnd') }}
             </el-dropdown-item>
-            <el-dropdown-item command="researcher" :icon="OfficeBuilding">
+            <el-dropdown-item v-if="!apiEnabled" command="researcher" :icon="OfficeBuilding">
               {{ $t('nav.researcherEnd') }}
             </el-dropdown-item>
 
