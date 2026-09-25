@@ -4,6 +4,7 @@ import { api, apiEnabled } from '@/services/api'
 import { mockSubjects } from '@/mocks/subjects'
 import { useExperimentStore } from '@/stores/experiment'
 import { sessionUnavailable } from '@/services/schedule'
+import { restoreParticipationTitles } from '@/services/participations'
 import i18n, { pickLocalized } from '@/i18n' // Step 15：报名时按当前界面语言择优实验标题主文本
 
 /**
@@ -17,18 +18,11 @@ import i18n, { pickLocalized } from '@/i18n' // Step 15：报名时按当前界�
  * 学生端与研究者端共享此 store，保证两端数据一致。
  */
 export const useSubjectStore = defineStore('subject', () => {
-  // 从 mock 深拷贝一份，避免直接改动源常量（数组字段单独浅拷贝即可满足演示需求）
-  const list = ref(
-    (apiEnabled ? [] : mockSubjects).map((s) => ({
-      ...s,
-      reputationLog: [...s.reputationLog],
-      participations: [...s.participations],
-    })),
-  )
+  const list = ref(apiEnabled ? [] : structuredClone(mockSubjects))
   if (!apiEnabled) {
     try {
       const saved = JSON.parse(localStorage.getItem('actmind.demo.subjects.v1') || 'null')
-      if (Array.isArray(saved) && saved.every(s => s && typeof s.id === 'string' && Array.isArray(s.participations) && Array.isArray(s.reputationLog))) list.value = saved
+      if (Array.isArray(saved) && saved.every(s => s && typeof s.id === 'string' && Array.isArray(s.participations) && Array.isArray(s.reputationLog))) list.value = restoreParticipationTitles(saved, mockSubjects)
     } catch { /* Keep the seed records if browser storage cannot be read. */ }
     watch(list, value => {
       try { localStorage.setItem('actmind.demo.subjects.v1', JSON.stringify(value)) } catch { /* Demo remains usable in memory. */ }

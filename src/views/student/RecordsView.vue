@@ -27,7 +27,7 @@ onMounted(load)
     <el-button v-if="error" @click="load">{{ $t('backend.retry') }}</el-button>
     <el-card shadow="never">
       <el-table v-loading="loading" :data="records" :empty-text="$t('backend.empty')">
-        <el-table-column :label="$t('backend.experiment')" min-width="240"><template #default="{ row }">{{ pickLocalized(row.experimentTitle || row.experimentName, locale) }}</template></el-table-column>
+        <el-table-column :label="$t('backend.experiment')" min-width="240"><template #default="{ row }">{{ pickLocalized(row.experimentTitle, locale) || pickLocalized(row.experimentName, locale) }}</template></el-table-column>
         <el-table-column :label="$t('backend.status')" width="180"><template #default="{ row }"><el-tag :type="row.status === '已完成' ? 'success' : 'info'">{{ $t(row.status === '已完成' ? 'backend.completed' : 'backend.enrolled') }}</el-tag></template></el-table-column>
         <el-table-column prop="reward" :label="$t('backend.reward')" width="120" />
         <el-table-column :label="$t('schedule.session') + ' (JST)'" min-width="250"><template #default="{ row }">{{ row.session ? sessionLabel(row.session, locale) : $t('schedule.noSchedule') }}</template></el-table-column>
